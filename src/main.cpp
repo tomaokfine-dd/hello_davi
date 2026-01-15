@@ -1,52 +1,50 @@
 #include <Arduino.h>
-#include <Bounce2.h>
 
-// Pin definitions
-const int SWITCH_PIN = D2;  // GPIO switch pin
-const int LED_PIN = D10;    // GPIO LED pin
+const float ADC_MAX = 4095.0;
+const float VREF = 3.3;
+const int NUM_SAMPLES = 20;
 
-// Debounce object
-Bounce2::Button button = Bounce2::Button();
+// Use A0/A1 instead of hardcoding GPIO 34/35
+const int ADC_PIN_A = D0;   // When VOUT1 or VOUT2 is connected to D0, it usually maps to A0
+const int ADC_PIN_B = D1;   // When the other channel is connected to D1, it usually maps to A1
 
-// Variable to track LED state
-bool ledState = false;
+float readAveragedADC(int pin) {
+  long sum = 0;
+  for (int i = 0; i < NUM_SAMPLES; i++) {
+    sum += analogRead(pin);
+    delay(2);
+  }
+  return sum / (float)NUM_SAMPLES;
+}
 
 void setup() {
-  // Initialize Serial for logging
   Serial.begin(115200);
-  delay(1000);  // Wait for serial to initialize
-  
-  Serial.println("\n\n=== LED Switch Control Initialized ===");
-  Serial.println("XIAO ESP32C3 - Tactile Switch with LED Control");
-  Serial.println("=====================================\n");
-  
-  // Configure LED pin
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);  // Start with LED off
-  
-  // Configure debounced button
-  button.attach(SWITCH_PIN, INPUT_PULLUP);  // Use internal pull-up
-  button.interval(50);  // Debounce interval in ms
-  button.setPressedState(LOW);  // Button is pressed when LOW
-  
-  Serial.println("Setup complete. Waiting for button presses...\n");
+  delay(200);
+
+  analogReadResolution(12);
+
+  // Note: On some boards, only A0/A1 are mapped to ADC-capable pins.
+  // Explicitly setting attenuation improves stability.
+  analogSetPinAttenuation(ADC_PIN_A, ADC_11db);
+  analogSetPinAttenuation(ADC_PIN_B, ADC_11db);
+
+  Serial.println("ADC_A, V_A(V), ADC_B, V_B(V)");
 }
 
 void loop() {
-  // Update button state
-  button.update();
-  
-  // Check if button was pressed
-  if (button.pressed()) {
-    // Toggle LED state
-    ledState = !ledState;
-    digitalWrite(LED_PIN, ledState ? HIGH : LOW);
-    
-    // Log the state change
-    Serial.print("Button pressed - LED is now: ");
-    Serial.println(ledState ? "ON" : "OFF");
-  }
-  
-  // Small delay to prevent overwhelming the serial output
-  delay(10);
+  float rawA = readAveragedADC(ADC_PIN_A);
+  float rawB = readAveragedADC(ADC_PIN_B);
+
+  float vA = (rawA / ADC_MAX) * VREF;
+  float vB = (rawB / ADC_MAX) * VREF;
+
+  Serial.print((int)rawA);
+  Serial.print(", ");
+  Serial.print(vA, 3);
+  Serial.print(", ");
+  Serial.print((int)rawB);
+  Serial.print(", ");
+  Serial.println(vB, 3);
+
+  delay(300);
 }
